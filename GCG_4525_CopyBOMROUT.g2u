@@ -1,0 +1,767 @@
+Program.Sub.ScreenSU.Start
+Gui.F_BomCopy..Create
+Gui.F_BomCopy..Caption("Copy BOM and Router")
+Gui.F_BomCopy..Size(6525,2310)
+Gui.F_BomCopy..MinX(0)
+Gui.F_BomCopy..MinY(0)
+Gui.F_BomCopy..Position(0,0)
+Gui.F_BomCopy..BackColor(-2147483633)
+Gui.F_BomCopy..MousePointer(0)
+Gui.F_BomCopy..Event(UnLoad,F_BomCopy_UnLoad)
+Gui.F_BomCopy.txtBOM.Create(TextBox,"",True,3030,300,0,2580,300,False,0,"Arial",8,-2147483643,1)
+Gui.F_BomCopy.txtBOM.Locked(True)
+Gui.F_BomCopy.cmdBrowser.Create(Button)
+Gui.F_BomCopy.cmdBrowser.Size(375,375)
+Gui.F_BomCopy.cmdBrowser.Position(5745,255)
+Gui.F_BomCopy.cmdBrowser.Caption("^")
+Gui.F_BomCopy.cmdBrowser.Event(Click,cmdBrowser_Click)
+Gui.F_BomCopy.txt2.Create(TextBox,"",True,1740,300,0,2580,855,True,0,"Arial",8,-2147483643,1)
+Gui.F_BomCopy.txt2.MaxLength(7)
+Gui.F_BomCopy.cmdCopy.Create(Button)
+Gui.F_BomCopy.cmdCopy.Size(1005,375)
+Gui.F_BomCopy.cmdCopy.Position(3780,1320)
+Gui.F_BomCopy.cmdCopy.Caption("OK")
+Gui.F_BomCopy.cmdCopy.Event(Click,cmdCopy_Click)
+Gui.F_BomCopy.lblBOM.Create(Label,"Copy from Parent Number:",True,2670,255,0,300,375,True,0,"Arial",8,-2147483633,0)
+Gui.F_BomCopy.lblReference.Create(Label,"Reference #",True,1425,255,0,300,960,True,0,"Arial",8,-2147483633,0)
+Gui.F_BomCopy.cmdCancel.Create(Button)
+Gui.F_BomCopy.cmdCancel.Size(1005,375)
+Gui.F_BomCopy.cmdCancel.Position(4980,1320)
+Gui.F_BomCopy.cmdCancel.Caption("Cancel")
+Gui.F_BomCopy.cmdCancel.Event(Click,F_BomCopy_UnLoad)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.External.Include.Library("GCG_4525_RtrUploadUPLRTRHR_V1.lib")
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'We begin our journey by opening a connection and displaying our beautiful screen
+F.ODBC.Connection!con.OpenConnection(V.Ambient.PDSN, V.Ambient.PUser, V.Ambient.PPass)
+Gui.F_BomCopy..Show
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.cmdBrowser_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdBrowser_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sReturn.Declare(String)
+
+'This gets fired when they click on the Browser button. We allow them to select the BOM they would like to copy. If one is selected we print it on the BOM textbox
+F.Intrinsic.UI.Browser(3000, "", V.Local.sReturn)
+
+F.Intrinsic.Control.If(V.Local.sReturn.Trim, <>, "***CANCEL***")
+	F.Intrinsic.String.Split(V.Local.sReturn, "*!*", V.Local.sReturn)
+	Gui.F_BomCopy.txtBOM.Text(V.Local.sReturn(0))
+	
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdBrowser_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdBrowser_Click.End
+
+Program.Sub.cmdCopy_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdCopy_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sBOM.Declare(String)
+V.Local.sRef.Declare(String)
+
+'We first check to make sure they have selected a BOM and a Reference.
+V.Local.sBOM.Set(V.Screen.F_BomCopy!txtBOM.Text)
+V.Local.sRef.Set(V.Screen.F_BomCopy!txt2.Text)
+F.Intrinsic.Control.If(V.Local.sBom.Trim, =, "", "OR", V.Local.sRef.Trim, =, "")
+	F.Intrinsic.UI.Msgbox("Please select a BOM to copy and enter in a Reference number for the new BOM", "Missing information")
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+
+Gui.F_BomCopy..Enabled(False)
+
+F.Intrinsic.UI.InvokeWaitDialog("Exploding BOM", "BOM Copy in process")
+F.Intrinsic.UI.ChangeWaitStatus("Exploding BOM", 2, 0, 7)
+
+F.Intrinsic.Control.CallSub(explodebom)
+F.Intrinsic.Control.CallSub(manufacturedparts)
+F.Intrinsic.Control.CallSub(creationalism)
+F.Intrinsic.Control.CallSub(outtershell)
+
+F.Intrinsic.UI.CloseWaitDialog
+Gui.F_BomCopy.txtBOM.Text("")
+Gui.F_BomCopy.txt2.Text("")
+
+F.Intrinsic.UI.Msgbox("BOM and all associated BOMs and Routers have been successfully created.", "Process complete")
+Gui.F_BomCopy..Enabled(True)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdCopy_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdCopy_Click.End
+
+Program.Sub.F_BomCopy_UnLoad.Start
+F.Intrinsic.Control.SetErrorHandler("F_BomCopy_UnLoad_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'Exit program
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("F_BomCopy_UnLoad_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.F_BomCopy_UnLoad.End
+
+Program.Sub.ExplodeBOM.Start
+F.Intrinsic.Control.SetErrorHandler("ExplodeBOM_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local..BulkDeclareString(sBOM, sRef, sFilePath, sFile, sParams, sRet, sTitles, sContent, sTypes, sData, sLine)
+V.Local.bExists.Declare(Boolean)
+V.Local.iCount.Declare(Long)
+V.Local.iTop.Declare(Long)
+
+'The BOM to be copied will be in the textbox will be exploded
+V.Local.sBOM.Set(V.Screen.F_BomCopy!txtBOM.Text)
+V.Local.sRef.Set(V.Screen.F_BomCopy!txt2.Text)
+
+F.Intrinsic.String.RPad(V.Local.sBOM, " ", 20, V.Local.sBOM)
+F.Intrinsic.String.Build("{0}\BOM{1}", V.System.Temp, V.Caller.Terminal, V.Local.sFilePath)
+F.Intrinsic.String.Build("0{0}{1}{0}{2}", V.Ambient.Tab, V.Local.sBOM, V.Local.sFilePath, V.Local.sParams)
+F.Intrinsic.UI.ChangeWaitStatus("Exploding BOM", 5, 0, 7)
+
+
+F.Intrinsic.File.String2File(V.Local.sFilePath, V.Local.sParams)
+F.Intrinsic.UI.ChangeWaitStatus("Exploding BOM", 6, 0, 7)
+
+F.Global.General.CallWrapperSync(410000, V.Local.sFilePath)
+
+
+F.Intrinsic.UI.ChangeWaitStatus("Gathering additional information", 0, 0, 5)
+
+'Check to see if the BOM was processed.
+F.Intrinsic.File.Exists(V.Local.sFilePath, V.Local.bExists)
+
+F.Intrinsic.Control.If(V.Local.bExists, =, False)
+	'The BOM was not exploded, => Maybe not BOM?
+	
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.File.FiletoStringArray(V.Local.sFilePath,V.Ambient.Tab,V.Local.sRet)
+V.Local.sRet.RedimPreserve(0,3)
+F.Intrinsic.File.GetFileNameFromFQN(V.Local.sRet(3),V.Local.sFile.Trim)
+F.Intrinsic.String.Split(V.Local.sFile," ",V.Local.sFile)
+F.Intrinsic.String.Build("{0}\{1}",V.System.Temp,V.Local.sFile(0).Trim,V.Local.sFilePath)
+F.Intrinsic.UI.ChangeWaitStatus("Gathering additional information", 1, 0, 5)
+
+F.Intrinsic.File.Exists(V.Local.sFilePath,V.Local.bExists)
+
+F.Intrinsic.Control.If(V.Local.bExists,=,False)
+	'The BOM was not exploded.
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.File.File2String(V.Local.sFilePath, V.Local.sRet)
+
+F.Intrinsic.String.Split(V.Local.sRet, V.Ambient.NewLine, V.Local.sContent)
+
+'The titles will be on the fifth place
+'F.Intrinsic.String.Replace(V.Local.sContent(5), "|~|", "*!*", V.Local.sTitles)
+'F.Intrinsic.String.Replace(V.Local.sTitles, "Date*!*Part Number", "Date*!*PartNo", V.Local.sTitles)
+'The columns will be Line, Seq, Part Number, Description, Category, Source, Quantity, On Hand, On Order, Required, Net, Router Net, Parent, Lead (Days), Lead Date, Part Number
+'V.Local.sTypes.Set("Long*!*String*!*String*!*String*!*String*!*String*!*Float*!*Float*!*Float*!*Float*!*Float*!*Float*!*String*!*String*!*String*!*String*!*String")
+
+F.Intrinsic.Control.For(V.Local.iCount, 0, 6, 1)
+	F.Intrinsic.Variable.PopArray(V.Local.sContent, V.Local.sContent)
+F.Intrinsic.Control.Next(v.Local.iCount)
+
+F.Intrinsic.UI.ChangeWaitStatus("Gathering additional information", 2, 0, 5)
+
+F.Data.DataTable.Create("BOMExplosion", True)
+F.Data.DataTable.AddColumn("BOMExplosion", "Line", "Long")
+F.Data.DataTable.AddColumn("BOMExplosion", "Seq", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "PartNumber", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Description", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Category", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Source", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Quantity", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "OnHand", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "OnOrder", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Required", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Net", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "RouterNet", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Parent", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "LeadDays", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "LeadDate", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "PNO", "String")
+
+F.Intrinsic.Math.Add(V.Local.sContent.UBound, -1, V.Local.iTop)
+F.Intrinsic.Control.For(V.Local.iCount, 0, V.Local.iTop, 1)
+	F.Intrinsic.String.Split(V.Local.sContent(V.Local.iCount), "|~|", V.Local.sLine)
+	F.Data.DataTable.AddRow("BOMExplosion", "Line", V.Local.sLine(0), "Seq", V.Local.sLine(1), "PartNumber", V.Local.sLine(2).Trim, "Description", V.Local.sLine(3), "Category", V.Local.sLine(4), "Source", V.Local.sLine(5).Trim, "Quantity", V.Local.sLine(6), "OnHand", V.Local.sLine(7), "OnOrder", V.Local.sLine(8), "Required", V.Local.sLine(9), "Net", V.Local.sLine(10), "RouterNet", V.Local.sLine(11), "Parent", V.Local.sLine(12).Trim, "LeadDays", V.Local.sLine(13), "LeadDate", V.Local.sLine(14), "PNO", V.Local.sLine(15))
+F.Intrinsic.Control.Next(V.Local.iCount)
+
+F.Data.DataTable.AddExpressionColumn("BOMExplosion", "PPKey", "String", "[PartNumber] + '-' + [Parent]")
+F.Data.DataTable.CreateFromSQL("Temp", "con", "Select UM_INVENTORY, QUANTITY, SEQUENCE_BOM, RTrim(Part) + '-' + RTrim(Parent) as PPKey from BOM_MSTR")
+
+'Adding in the UM
+F.Data.Dictionary.CreateFromDataTable("UM", "Temp", "PPKey", "UM_INVENTORY")
+F.Data.Dictionary.SetDefaultReturn("UM", "")
+F.Data.DataTable.AddColumn("BOMExplosion", "UM", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "UM", "PPKey", "UM")
+F.Data.Dictionary.Close("UM")
+
+'Adding the UM from INVENTORY_MSTR
+F.Data.Dictionary.CreateFromSQL("UMINV", "con", "Select RTRIM(PART), UM_INVENTORY from V_INVENTORY_MSTR")
+F.Data.Dictionary.SetDefaultReturn("UMINV", "")
+F.Data.DataTable.AddColumn("BOMExplosion", "UMINV", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "UMINV", "PartNumber", "UMINV")
+F.Data.Dictionary.Close("UMINV")
+F.Intrinsic.UI.ChangeWaitStatus("Gathering additional information", 3, 0, 5)
+
+
+'Adding in the Quantity
+F.Data.Dictionary.CreatefromDataTable("Quant", "Temp", "PPKey", "QUANTITY")
+F.Data.Dictionary.SetDefaultReturn("Quant", "0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Quant", "PPKey", "Qty")
+F.Data.DataTable.SetValueFormat("BOMExplosion", -1, "Qty", "Qty", "0.0000")
+F.Data.Dictionary.Close("Quant")
+
+'Adding in the Sequence
+F.Data.Dictionary.CreatefromDataTable("Sequence", "Temp", "PPKey", "SEQUENCE_BOM")
+F.Data.Dictionary.SetDefaultReturn("Sequence", "0000")
+F.Data.DataTable.AddColumn("BOMExplosion", "BOMSeq", "String")
+F.Data.DataTable.AddColumn("BOMExplosion", "Seq2", "String")
+F.Data.DataTable.SetValueFormat("BOMExplosion", -1, "Seq2", "Seq2", "0000")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Sequence", "PPKey", "BOMSeq")
+F.Data.Dictionary.Close("Sequence")
+
+F.Data.DataTable.Close("Temp")
+
+F.Data.Dictionary.CreateFromSQL("Parent", "con", "Select RTrim(Part), Is_Parent from BOM_ENG")
+F.Data.Dictionary.SetDefaultReturn("Parent", "")
+F.Data.DataTable.AddColumn("BOMExplosion", "IsParent", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Parent", "PartNumber", "IsParent")
+F.Data.Dictionary.Close("Parent")
+
+F.Data.DataTable.CreateFromSQL("Temp", "con", "Select Rtrim(Part) as part, Product_line, Location from INVENTORY_MSTR")
+
+F.Data.Dictionary.CreatefromDataTable("PL", "Temp", "Part", "Product_Line")
+F.Data.Dictionary.SetDefaultReturn("PL", "")
+F.Data.DataTable.AddColumn("BOMExplosion", "PL", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "PL", "PartNumber", "PL")
+F.Data.Dictionary.Close("PL")
+
+F.Data.Dictionary.CreatefromDatatable("Loc", "Temp", "Part", "Location")
+F.Data.Dictionary.SetDefaultReturn("Loc", "")
+F.Data.DataTable.AddColumn("BOMExplosion", "Location", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Loc", "PartNumber", "Location")
+F.Data.Dictionary.Close("Loc")
+
+F.Data.Dictionary.CreateFromSQL("Temp", "con", "Select Rtrim(Router) as router, 'Y' as IsRouter from V_Router_Header")
+F.Data.Dictionary.SetDefaultReturn("Temp", "")
+F.Data.DataTable.AddColumn("BOMExplosion", "IsRouter", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Temp", "PartNumber", "IsRouter")
+F.Data.Dictionary.Close("Temp")
+
+'Translating manufacturing code to be used for creating new BOMS and Routers
+F.Data.Dictionary.Create("Manufacture")
+F.Data.Dictionary.AddItem("Manufacture", "MJ", "J")
+F.Data.Dictionary.AddItem("Manufacture", "MS", "M")
+F.Data.Dictionary.AddItem("Manufacture", "PS", "P")
+F.Data.Dictionary.AddItem("Manufacture", "PJ", "J")
+F.Data.Dictionary.AddItem("Manufacture", "CS", "C")
+F.Data.Dictionary.AddItem("Manufacture", "CJ", "G")
+F.Data.Dictionary.SetDefaultReturn("Manufacture", " ")
+
+F.Data.DataTable.AddColumn("BOMExplosion", "Manu", "String")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Manufacture", "Source", "Manu")
+F.Data.Dictionary.Close("Manufacture")
+
+'We will be storing the part number in NewPart. 
+F.Data.DataTable.AddColumn("BOMExplosion", "NewPart", "String")
+F.Data.DataTable.SetValue("BOMExplosion", -1, "NewPart", "***")
+
+F.Intrinsic.String.LPad(V.Local.sRef, " ", 7, V.Local.sRef)
+F.Intrinsic.String.RPad(V.Local.sBOM.Trim, " ", 10, V.Local.sBOM)
+F.Intrinsic.String.Build("{0}{1}", V.Local.sBOM, V.Local.sRef, V.Local.sRef)
+F.Data.DataTable.SetValue("BOMExplosion", 0, "NewPart", V.Local.sRef)
+
+'Get the quantities 1-8 (these will be used for the routers
+F.Data.DataTable.CreateFromSQL("QtyTemp", "con", "Select RTrim(ROUTER) as Router, QUANTITY_1, QUANTITY_2, QUANTITY_3, QUANTITY_4 from V_RTR_PRICE_1_4")
+
+F.Data.Dictionary.CreateFromDataTable("Qty1", "QtyTemp", "ROUTER", "QUANTITY_1")
+F.Data.Dictionary.SetDefaultReturn("Qty1", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty1", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty1", "PartNumber", "Qty1")
+F.Data.Dictionary.Close("Qty1")
+
+F.Data.Dictionary.CreateFromDataTable("Qty2", "QtyTemp", "ROUTER", "QUANTITY_2")
+F.Data.Dictionary.SetDefaultReturn("Qty2", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty2", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty2", "PartNumber", "Qty2")
+F.Data.Dictionary.Close("Qty2")
+
+F.Data.Dictionary.CreateFromDataTable("Qty3", "QtyTemp", "ROUTER", "QUANTITY_3")
+F.Data.Dictionary.SetDefaultReturn("Qty3", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty3", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty3", "PartNumber", "Qty3")
+F.Data.Dictionary.Close("Qty3")
+
+F.Data.Dictionary.CreateFromDataTable("Qty4", "QtyTemp", "ROUTER", "QUANTITY_4")
+F.Data.Dictionary.SetDefaultReturn("Qty4", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty4", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty4", "PartNumber", "Qty4")
+F.Data.Dictionary.Close("Qty4")
+
+F.Data.DataTable.Close("QtyTemp")
+
+F.Data.DataTable.CreateFromSQL("QtyTemp", "con", "Select ROUTER, QUANTITY_5, QUANTITY_6, QUANTITY_7, QUANTITY_8 from V_RTR_PRICE_5_8")
+
+F.Data.Dictionary.CreateFromDataTable("Qty5", "QtyTemp", "ROUTER", "QUANTITY_5")
+F.Data.Dictionary.SetDefaultReturn("Qty5", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty5", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty5", "PartNumber", "Qty5")
+F.Data.Dictionary.Close("Qty5")
+
+F.Data.Dictionary.CreateFromDataTable("Qty6", "QtyTemp", "ROUTER", "QUANTITY_6")
+F.Data.Dictionary.SetDefaultReturn("Qty6", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty6", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty6", "PartNumber", "Qty6")
+F.Data.Dictionary.Close("Qty6")
+
+F.Data.Dictionary.CreateFromDataTable("Qty7", "QtyTemp", "ROUTER", "QUANTITY_7")
+F.Data.Dictionary.SetDefaultReturn("Qty7", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty7", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty7", "PartNumber", "Qty7")
+F.Data.Dictionary.Close("Qty7")
+
+F.Data.Dictionary.CreateFromDataTable("Qty8", "QtyTemp", "ROUTER", "QUANTITY_8")
+F.Data.Dictionary.SetDefaultReturn("Qty8", "0.0")
+F.Data.DataTable.AddColumn("BOMExplosion", "Qty8", "Float")
+F.Data.DataTable.FillFromDictionary("BOMExplosion", "Qty8", "PartNumber", "Qty8")
+F.Data.Dictionary.Close("Qty8")
+
+F.Intrinsic.UI.ChangeWaitStatus("Gathering additional information", 4, 0, 5)
+
+
+F.Data.DataTable.Close("QtyTemp")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("ExplodeBOM_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.ExplodeBOM.End
+
+Program.Sub.ManufacturedParts.Start
+F.Intrinsic.Control.SetErrorHandler("ManufacturedParts_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.iCount.Declare(Long)
+V.Local.sFlag.Declare(String)
+
+F.Data.DataTable.CreateFromSQL("NewRouters", "con", "Select * from V_ROUTER_LINE where ROUTER = ''", True)
+F.Data.DataTable.DeleteRow("NewRouters")
+F.Data.DataTable.AddColumn("NewRouters", "NewRouter", "String")
+
+F.Data.DataTable.Clone("BOMExplosion", "NewBOMs", True)
+F.Data.DataTable.AddColumn("NewBOMs", "NewParent", "String")
+
+F.Data.DataView.Create("BOMExplosion", "ManParts", 22, "Source = 'MJ' and SEQ = '1*******'", "Line ASC")
+
+F.Intrinsic.Control.For(V.Local.iCount, 0, V.DataView.BOMExplosion!ManParts.RowCount--, 1)
+	F.Intrinsic.UI.ChangeWaitStatus("Preparing Manufactured to Job Parts to be created", V.Local.iCount, 0, V.DataView.BomExplosion!ManParts.Rowcount--)
+
+	'If part is BOM, Make new BOM
+	V.Local.sFlag.Set(V.DataView.BOMExplosion!ManParts(V.Local.iCount).IsParent!FieldValTrim)
+	F.Intrinsic.Control.If(V.Local.sFlag, =, "Y")
+		F.Intrinsic.Control.CallSub(makebom, "ViewRow", V.Local.iCount) 
+	F.Intrinsic.Control.EndIf
+	
+	V.Local.sFlag.Set(V.DataView.BOMExplosion!ManParts(V.Local.iCount).IsRouter!FieldValTrim)
+	'If part is Router, Make new Router
+	F.Intrinsic.Control.If(V.Local.sFlag, =, "Y")
+		F.Intrinsic.Control.CallSub(makert, "ViewRow", V.Local.iCount)
+	F.Intrinsic.Control.EndIf
+	
+	V.Local.sFlag.Set("N")
+F.Intrinsic.Control.Next(V.Local.iCount)
+
+'Get the PL
+F.Data.Dictionary.CreateFromSQL("PrdLn", "con", "Select Part, PRODUCT_LINE from V_INVENTORY_MSTR")
+F.Data.Dictionary.SetDefaultReturn("PrdLn", "")
+F.Data.DataTable.AddColumn("NewRouters", "PL", "String")
+F.Data.DataTable.FillFromDictionary("NewRouters", "PrdLn", "PART_WC_OUTSIDE", "PL")
+F.Data.Dictionary.Close("PrdLn")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("ManufacturedParts_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.ManufacturedParts.End
+
+Program.Sub.makeBOM.Start
+F.Intrinsic.Control.SetErrorHandler("makeBOM_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local.sReference.Declare(String)
+V.Local.sNewParent.Declare(String)
+V.Local.sFilter.Declare(String)
+V.Local.iCount.Declare(String)
+
+'We get the parent part number for the bom that we are creating. The new number will be the original name plus the reference number.
+V.Local.sReference.Set(V.Screen.F_BomCopy!txt2.Text)
+F.Intrinsic.String.LPad(V.Local.sReference, " ", 7, V.Local.sReference)
+F.Intrinsic.String.RPad(V.DataView.BOMExplosion!ManParts(V.Args.ViewRow.Long).PartNumber!FieldValTrim, " ", 10, V.Local.sNewParent)
+F.Intrinsic.String.Build("{0}{1}", V.Local.sNewParent, V.Local.sReference, V.Local.sNewParent)
+
+F.Data.DataView.SetValue("BOMExplosion", "ManParts", V.Args.ViewRow.Long, "NewPart", V.Local.sNewParent)
+
+F.Intrinsic.String.Build("[Parent] = '{0}' and Seq = ' 2******'", V.DataView.BOMExplosion!ManParts(V.Args.ViewRow.Long).PartNumber!FieldValTrim, V.Local.sFilter)
+'The rest of the BOM will stay the same
+F.Data.DataView.Create("BOMExplosion", "NewBOM", 22, V.Local.sFilter, "Line ASC")
+F.Data.DataView.ToDataTable("BOMExplosion", "NewBOM", "TempBOM")
+
+F.Data.DataTable.AddColumn("TempBOM", "NewParent", "String")
+F.Data.DataTable.SetValue("TempBOM", -1, "NewParent", V.Local.sNewParent)
+
+F.Data.DataTable.Merge("TempBOM", "NewBOMs", True, 2)
+
+F.Data.DataTable.Close("TempBOM")
+F.Data.DataView.Close("BOMExplosion", "NewBOM")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("makeBOM_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.makeBOM.End
+
+Program.Sub.makeRT.Start
+F.Intrinsic.Control.SetErrorHandler("makeRT_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local..BulkDeclareString(sReference, sNewParent, sFilter, sSql)
+V.Local.iCount.Declare(Long)
+
+'We get the parent part number for the bom that we are creating. The new number will be the original name plus the reference number.
+V.Local.sReference.Set(V.Screen.F_BomCopy!txt2.Text)
+F.Intrinsic.String.LPad(V.Local.sReference, " ", 7, V.Local.sReference)
+F.Intrinsic.String.RPad(V.DataView.BOMExplosion!ManParts(V.Args.ViewRow.Long).PartNumber!FieldValTrim, " ", 10, V.Local.sNewParent)
+F.Intrinsic.String.Build("{0}{1}", V.Local.sNewParent, V.Local.sReference, V.Local.sNewParent)
+
+F.Data.DataView.SetValue("BOMExplosion", "ManParts", V.Args.ViewRow.Long, "NewPart", V.Local.sNewParent)
+
+F.Intrinsic.String.Build("Select * from V_ROUTER_LINE where ROUTER = '{0}' order by LINE_ROUTER", V.DataView.BOMExplosion!Manparts(V.Args.ViewRow.Long).PartNumber!FieldValTrim, V.Local.sSql)
+F.Data.DataTable.CreateFromSQL("NewRT", "con", V.Local.sSql)
+
+'substitute the old router part with the new router
+F.Data.DataTable.AddColumn("NewRT", "NewRouter", "String")
+F.Data.DataTable.SetValue("NewRT", -1, "NewRouter", V.Local.sNewParent)
+
+'save to main data table
+F.Data.DataTable.Merge("NewRT", "NewRouters", True, 2)
+F.Data.DataTable.Close("NewRT")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("makeRT_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+Program.Sub.makeRT.End
+
+Program.Sub.Creationalism.Start
+F.Intrinsic.Control.SetErrorHandler("Creationalism_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local..BulkDeclareString(sBOMBuild, sRouterBuild, sFlag, sFilter, sNewParent, sQuantity, sPartNumber, sUM, sDesc, sFiller, sToday, sCategory, sSource, sManu, sSeq, sNewRouter, sFilePath, sLMO, sElements, sQuantities)
+V.Local.iInterval.Declare(Long)
+V.Local.iCount.Declare(Long)
+V.Local.iIndex.Declare(Long)
+V.Local.bEx.Declare(Boolean)
+
+F.Global.General.ReadOption(401096, 3, "100", V.Local.iInterval)
+F.Intrinsic.String.Format(V.Ambient.Date, "MMDDYY", V.Local.sToday)
+
+F.Intrinsic.Control.For(V.Local.iCount, 0, V.DataView.BOMExplosion!ManParts.RowCount--, 1)
+
+	F.Intrinsic.UI.ChangeWaitStatus("Formatting new parts", V.Local.iCount, 0, V.DataView.BomExplosion!ManParts.Rowcount--)
+
+	'Check to see if line is a BOM Parent
+	V.Local.sFlag.Set(V.DataView.BOMExplosion!ManParts(V.Local.iCount).IsParent!FieldValTrim)
+	F.Intrinsic.Control.If(V.Local.sFlag, =, "Y")
+		'We will be creating the string that will build the file for the BOMs
+		'The first line we add is for the header
+		F.Intrinsic.String.Build("[Parent] = '{0}'", V.DataView.BOMExplosion!ManParts(V.Local.iCount).PartNumber!FieldValTrim, V.Local.sFilter)
+		F.Data.DataView.Create("NewBOMs", "TempBOM", 22, V.Local.sFilter, "LINE ASC")
+		F.Data.DataView.SetSeries("NewBOMs", "TempBOM", "Seq2", V.Local.iInterval, V.Local.iInterval)
+				
+		F.Intrinsic.String.RPad(V.DataView.NewBOMs!TempBOM(0).NewParent!FieldValTrim, " ", 20, V.Local.sNewParent)
+		F.Intrinsic.String.LPad(V.DataView.BOMExplosion!ManParts(V.Local.iCount).QUANTITY!FieldValTrim, "0", 16, V.Local.sQuantity)
+		F.Intrinsic.String.RPad(V.DataView.BOMExplosion!ManParts(V.Local.iCount).UM!FieldValTrim, " ", 2, V.Local.sUM)
+		F.Intrinsic.String.RPad(V.DataView.BOMExplosion!ManParts(V.Local.iCount).Description!FieldValTrim, " ", 30, V.Local.sDesc)
+		F.Intrinsic.String.Build("{0}{1}0000{2}{1}{3}{4}", V.Local.sBOMBuild, V.Local.sNewParent, V.Local.sQuantity, V.Local.sUM, V.Local.sDesc, V.Local.sBOMBuild)
+		F.Intrinsic.String.RPad(V.Local.sFiller, " ", 113, V.Local.sFiller)
+		V.Local.sCategory.Set(V.DataView.BOMExplosion!ManParts(V.Local.iCount).Category!FieldValTrim)
+		F.Intrinsic.Control.SelectCase(V.Local.sCategory)
+		F.Intrinsic.Control.Case("Nor")
+			V.Local.sCategory.Set(" ")
+		F.Intrinsic.Control.CaseElse
+			V.Local.sCategory.Set(" ")
+		F.Intrinsic.Control.EndSelect
+		F.Intrinsic.String.Build("{0}{1}{2}F", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sCategory, V.Local.sBOMBuild)
+		F.Intrinsic.String.RPad("", " ", 29, V.Local.sFiller)
+		F.Intrinsic.String.LPad("N", " ", 31, V.Local.sCategory)
+		F.Intrinsic.String.LPad("000000000000", " ", 24, V.Local.sDesc)
+		F.Intrinsic.String.Build("{0}{1}{2}{3}{4}{5}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sToday, V.Local.sDesc, V.Local.sCategory, V.Ambient.NewLine, V.Local.sBOMBuild)
+		
+		F.Intrinsic.Control.For(V.Local.iIndex, 0, V.DataView.NewBOMs!TempBOM.RowCount--, 1)
+		
+			F.Intrinsic.String.LPad(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).QTY!FieldValTrim, "0", 16, V.Local.sQuantity)
+			F.Intrinsic.String.RPad(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).UM!FieldValTrim, " ", 2, V.Local.sUM)
+			F.Intrinsic.String.RPad(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).Description!FieldValTrim, " ", 30, V.Local.sDesc)
+			F.Intrinsic.String.RPad(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).PartNumber!FieldValTrim, " ", 20, V.Local.sFiller)
+			F.Intrinsic.String.LPad(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).Seq2!FieldValTrim, "0", 4, V.Local.sSeq)			
+			F.Intrinsic.String.Build("{0}{1}{2}{3}", V.Local.sBOMBuild, V.Local.sNewParent, V.Local.sSeq, V.Local.sQuantity, V.Local.sBOMBuild)
+			F.Intrinsic.String.Build("{0}{1}{2}{3}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sUM, V.Local.sDesc, V.Local.sBOMBuild)
+			F.Intrinsic.String.RPad("", " ", 113, V.Local.sFiller)
+			V.Local.sCategory.Set(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).Category!FieldValTrim)
+			F.Intrinsic.Control.SelectCase(V.Local.sCategory)
+			F.Intrinsic.Control.Case("Nor")
+				V.Local.sCategory.Set(" ")
+			F.Intrinsic.Control.CaseElse
+				V.Local.sCategory.Set(" ")
+			F.Intrinsic.Control.EndSelect
+			V.Local.sManu.Set(V.DataView.NewBOMs!TempBOM(V.Local.iIndex).Manu!FieldVal)
+			F.Intrinsic.String.Build("{0}{1}{2}{3}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sCategory, V.Local.sManu, V.Local.sBOMBuild)
+			F.Intrinsic.String.RPad("", " ", 29, V.Local.sFiller)
+			F.Intrinsic.String.LPad("N", " ", 31, V.Local.sCategory)
+			F.Intrinsic.String.LPad("000000000000", " ", 24, V.Local.sDesc)
+			F.Intrinsic.String.Build("{0}{1}{2}{3}{4}{5}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sToday, V.Local.sDesc, V.Local.sCategory, V.Ambient.NewLine, V.Local.sBOMBuild)
+							
+		F.Intrinsic.Control.Next(V.Local.iIndex)
+		
+		F.Data.DataView.Close("NewBOMs", "TempBOM")
+	F.Intrinsic.Control.EndIf
+	
+	V.Local.sFlag.Set(V.DataView.BOMExplosion!ManParts(V.Local.iCount).IsRouter!FieldValTrim)
+	'Check to see if the line is a Router Header
+	F.Intrinsic.Control.If(V.Local.sFlag, =, "Y")
+		'We will be creating the string that will build the file for the Routers. We are using a .lib file, so we use delimeters "*!*" for the fields and NewLine for the new lines
+		'The first line that we add is for the header
+		F.Intrinsic.String.Build("[ROUTER] = '{0}'", V.DataView.BOMExplosion!ManParts(V.Local.iCount).PartNumber!FieldValTrim, V.Local.sFilter)
+		F.Data.DataView.Create("NewRouters", "TempRout", 22, V.Local.sFilter, "LINE_ROUTER ASC")
+		'get the header info from the ManParts Table
+		'NewRouter*!*RouterDescription*!*Sequence*!*LineItemType*!*PartNo*!*PartDesc*!*WorkCenter*!*Operation*!*Setup*!*Runtime*!*Rate*!*OriginalDate*!*UM*!*PL*!*Qty1*!*Qty2*!*Qty3*!*Qty4*!*Qty5*!*Qty6*!*Qty7*!*Qty8
+				
+		F.Intrinsic.String.Build("{0}*!*{1}*!*", V.DataView.NewRouters!TempRout(0).NewRouter!FieldValTrim, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Description!FieldValTrim, V.Local.sNewRouter)
+		F.Intrinsic.String.Build("{0}{1}000000*!* *!*{1}*!**!**!**!*", V.Local.sRouterBuild, V.Local.sNewRouter, V.Local.sRouterBuild)
+		F.Intrinsic.String.Build("{0}*!*{1}*!*{2}*!*{3}*!*", V.Local.sRouterBuild, V.Local.sToday, V.DataView.BOMExplosion!ManParts(V.Local.iCount).UM!FieldValTrim, V.DataView.BOMExplosion!ManParts(V.Local.iCount).PL!FieldValTrim, V.Local.sRouterBuild)
+	
+		'Quantities have to be stored in every line
+		F.Intrinsic.String.Build("{0}*!*{1}*!*{2}*!*", V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty1!FieldValFloat, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty2!FieldValFloat, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty3!FieldValFloat, V.Local.sQuantities)
+		F.Intrinsic.String.Build("{0}{1}*!*{2}*!*{3}*!*", V.Local.sQuantities, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty4!FieldValFloat, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty5!FieldValFloat, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty6!FieldValFloat, V.Local.sQuantities)
+		F.Intrinsic.String.Build("{0}{1}*!*{2}", V.Local.sQuantities, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty7!FieldValFloat, V.DataView.BOMExplosion!ManParts(V.Local.iCount).Qty8!FieldValFloat, V.Local.sQuantities)
+		F.Intrinsic.String.Build("{0}{1}{2}", V.Local.sRouterBuild, V.Local.sQuantities, V.Ambient.NewLine, V.Local.sRouterBuild)
+
+		F.Intrinsic.Control.For(V.Local.iIndex, 0, V.DataView.NewRouters!TempRout.RowCount--, 1)
+			
+			F.Intrinsic.String.Build("{0}{1}{2}*!*{3}*!*", V.Local.sRouterBuild, V.Local.sNewRouter, V.DataView.NewRouters!TempRout(V.Local.iIndex).Line_Router!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).LMO!FieldValTrim, V.Local.sRouterBuild)
+			V.Local.sLMO.Set(V.DataView.NewRouters!TempRout(V.Local.iIndex).LMO!FieldValTrim)
+			F.Intrinsic.Control.SelectCase(V.Local.sLMO.Trim)
+			F.Intrinsic.Control.Case("M")
+				'If it is a material sequence, the Part number will be in the PART_WC_OUTSIDE column
+				F.Intrinsic.String.Build("{0}{1}*!*{2}*!**!*", V.Local.sRouterBuild, V.DataView.NewRouters!TempRout(V.Local.iIndex).Part_WC_OUTSIDE!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).Desc_RT_LINE!FieldValTrim, V.Local.sRouterBuild)
+			F.Intrinsic.Control.Case("L")
+				'If it is a labor sequence, the work center will be in the PART_WC_OUTSIDE column
+				F.Intrinsic.String.Build("{0}*!*{2}*!*{1}*!*", V.Local.sRouterBuild, V.DataView.NewRouters!TempRout(V.Local.iIndex).Part_WC_OUTSIDE!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).Desc_RT_LINE!FieldValTrim, V.Local.sRouterBuild)				
+			F.Intrinsic.Control.Case("O")
+				'If it is an outside sequence, the OP will be in the PART_WC_OUTSIDE column
+				F.Intrinsic.String.Build("{0}{1}*!*{2}*!**!*", V.Local.sRouterBuild, V.DataView.NewRouters!TempRout(V.Local.iIndex).Part_WC_OUTSIDE!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).Desc_RT_LINE!FieldValTrim, V.Local.sRouterBuild)			
+			F.Intrinsic.Control.CaseElse
+				'Figure out what to do with the case else	
+				F.Intrinsic.String.Build("{0}{1}*!*{2}*!**!*", V.Local.sRouterBuild, V.DataView.NewRouters!TempRout(V.Local.iIndex).Part_WC_OUTSIDE!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).Desc_RT_LINE!FieldValTrim, V.Local.sRouterBuild)			
+			F.Intrinsic.Control.EndSelect		
+			F.Intrinsic.String.Build("{0}{1}*!*{2}*!*", V.Local.sRouterBuild, V.DataView.NewRouters!TempRout(V.Local.iIndex).OPERATION!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).SET_UP!FieldValTrim, V.Local.sRouterBuild)
+			F.Intrinsic.String.Build("{0}{1}*!*{2}*!*", V.Local.sRouterBuild, V.DataView.NewRouters!TempRout(V.Local.iIndex).RUN_TIME!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).RATE!FieldValTrim, V.Local.sRouterBuild)
+			F.Intrinsic.String.Build("{0}{1}*!*{2}*!*{3}*!*",V.Local.sRouterBuild, V.Local.sToday, V.DataView.NewRouters!TempRout(V.Local.iIndex).UM_INVENTORY!FieldValTrim, V.DataView.NewRouters!TempRout(V.Local.iIndex).PL!FieldValTrim, V.Local.sRouterBuild)	
+			F.Intrinsic.String.Build("{0}{1}{2}", V.Local.sRouterBuild, V.Local.sQuantities, V.Ambient.NewLine, V.Local.sRouterBuild)
+		F.Intrinsic.Control.Next(V.Local.iIndex)
+		
+		F.Data.DataView.Close("NewRouters", "TempRout")
+	F.Intrinsic.Control.EndIf
+	
+	V.Local.sFlag.Set("N")
+F.Intrinsic.Control.Next(V.Local.iCount)
+
+'Load the UDT with the Router info and send it over to the .lib subroutines to format and create routers.
+V.Local.sElements.Set("Number*!*Desc*!*Sequence*!*LMO*!*Part*!*Seq_Desc*!*Workcenter*!*Operation*!*Setup*!*Runtime*!*Rate*!*Orig_Date*!*UM*!*Prod_Line*!*Qty1*!*Qty2*!*Qty3*!*Qty4*!*Qty5*!*Qty6*!*Qty7*!*Qty8")
+F.Intrinsic.Variable.LoadUDTFromString(V.uGlobal.uRTR, V.Local.sElements, V.Local.sRouterBuild, V.Ambient.NewLine, "*!*", False)
+
+'This are subroutines for the .lib file. It will automatically format all fields and create the Router in global shop
+F.Intrinsic.Control.CallSub(routeraddrecord)
+F.Intrinsic.Control.CallSub(routerheader)
+F.Intrinsic.Control.CallSub(routerline)
+
+F.Intrinsic.UI.ChangeWaitStatus("Creating BOMs", 1, 0, 3)
+F.Intrinsic.String.Build("{0}\BOMHDR.TXT",V.Caller.FilesDir,V.Local.sFilePath)
+'check if this file exists
+F.Intrinsic.File.Exists(V.Local.sFilePath,V.Local.bEx)
+F.Intrinsic.Control.If(V.Local.bEx,=,True)
+	F.Intrinsic.File.DeleteFile(V.Local.sFilePath)
+F.Intrinsic.Control.EndIf
+'write our new file
+F.Intrinsic.File.String2File(V.Local.sFilePath,V.Local.sBOMBuild)
+'call our upload. switch a and x cause it's append mode and screenless
+F.Global.General.CallWrapperSync(50,"UPLBOMH")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Creationalism_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+Program.Sub.Creationalism.End
+
+Program.Sub.OutterShell.Start
+F.Intrinsic.Control.SetErrorHandler("OutterShell_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+V.Local..BulkDeclareString(sNewParent, sBOMBuild, sQuantity, sUM, sToday, sDesc, sFiller, sSeq, sCategory, sManu, sFilePath) 
+V.Local.iIndex.Declare(Long)
+V.Local.iInterval.Declare(Long)
+V.Local.bEx.Declare(Boolean)
+
+'Once we create all the inner routers and Boms for the manufactured parts, we can create the parent bom. 
+'If a part was manufactured and a new bom or router was created, the new part will be stored in NewPart, otherwise we will use the old part number
+F.Data.DataTable.AddExpressionColumn("BomExplosion", "FinalPart", "String", "IIF([NewPart] = '***', [PartNumber], [NewPart])")
+
+F.Data.DataView.Create("BomExplosion", "Shell", 22, "[Seq] = '' OR [Seq] = '1*******'", "Line ASC")
+F.Global.General.ReadOption(401096, 3, "100", V.Local.iInterval)
+F.Intrinsic.String.Format(V.Ambient.Date, "MMDDYY", V.Local.sToday)
+F.Data.DataView.SetSeries("BomExplosion", "Shell", "Seq2", 0, V.Local.iInterval)
+
+V.Local.sNewParent.Set(V.DataView.BOMExplosion!Shell(0).FinalPart!FieldVal)
+
+F.Intrinsic.Control.For(V.Local.iIndex, 0, V.DataView.BomExplosion!Shell.RowCount--, 1)
+	F.Intrinsic.UI.ChangeWaitStatus("Formatting parent BOM lines", V.Local.iIndex, 0, V.DataView.BomExplosion!Shell.Rowcount--)
+	F.Intrinsic.String.LPad(V.DataView.BOMExplosion!Shell(V.Local.iIndex).QTY!FieldValTrim, "0", 16, V.Local.sQuantity)
+	F.Intrinsic.String.RPad(V.DataView.BOMExplosion!Shell(V.Local.iIndex).UMINV!FieldValTrim, " ", 2, V.Local.sUM)
+	F.Intrinsic.String.RPad(V.DataView.BOMExplosion!Shell(V.Local.iIndex).Description!FieldValTrim, " ", 30, V.Local.sDesc)
+	F.Intrinsic.String.RPad(V.DataView.BOMExplosion!Shell(V.Local.iIndex).FinalPart!FieldValTrim, " ", 20, V.Local.sFiller)
+	F.Intrinsic.String.LPad(V.DataView.BOMExplosion!Shell(V.Local.iIndex).Seq2!FieldValTrim, "0", 4, V.Local.sSeq)			
+	F.Intrinsic.String.Build("{0}{1}{2}{3}", V.Local.sBOMBuild, V.Local.sNewParent, V.Local.sSeq, V.Local.sQuantity, V.Local.sBOMBuild)
+	F.Intrinsic.String.Build("{0}{1}{2}{3}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sUM, V.Local.sDesc, V.Local.sBOMBuild)
+	F.Intrinsic.String.RPad("", " ", 113, V.Local.sFiller)
+	V.Local.sCategory.Set(V.DataView.BOMExplosion!Shell(V.Local.iIndex).Category!FieldValTrim)
+	F.Intrinsic.Control.SelectCase(V.Local.sCategory)
+	F.Intrinsic.Control.Case("Nor")
+		V.Local.sCategory.Set(" ")
+	F.Intrinsic.Control.CaseElse
+		V.Local.sCategory.Set(" ")
+	F.Intrinsic.Control.EndSelect
+	V.Local.sManu.Set(V.DataView.BOMExplosion!Shell(V.Local.iIndex).Manu!FieldVal)
+	F.Intrinsic.String.Build("{0}{1}{2}{3}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sCategory, V.Local.sManu, V.Local.sBOMBuild)
+	F.Intrinsic.String.RPad("", " ", 29, V.Local.sFiller)
+	F.Intrinsic.String.LPad("N", " ", 31, V.Local.sCategory)
+	F.Intrinsic.String.LPad("000000000000", " ", 24, V.Local.sDesc)
+	F.Intrinsic.String.Build("{0}{1}{2}{3}{4}{5}", V.Local.sBOMBuild, V.Local.sFiller, V.Local.sToday, V.Local.sDesc, V.Local.sCategory, V.Ambient.NewLine, V.Local.sBOMBuild)
+					
+F.Intrinsic.Control.Next(V.Local.iIndex)
+
+F.Intrinsic.UI.ChangeWaitStatus("Creating Parent BOM", 100, 0, 100)
+
+F.Intrinsic.String.Build("{0}\BOMHDR.TXT",V.Caller.FilesDir,V.Local.sFilePath)
+'check if this file exists
+F.Intrinsic.File.Exists(V.Local.sFilePath,V.Local.bEx)
+F.Intrinsic.Control.If(V.Local.bEx,=,True)
+	F.Intrinsic.File.DeleteFile(V.Local.sFilePath)
+F.Intrinsic.Control.EndIf
+'write our new file
+F.Intrinsic.File.String2File(V.Local.sFilePath,V.Local.sBOMBuild)
+'call our upload. switch a and x cause it's append mode and screenless
+F.Global.General.CallWrapperSync(50,"UPLBOMH")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("OutterShell_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4525_CopyBOMROUT.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.CallSub(f_bomcopy_unload)
+Function.Intrinsic.Control.EndIf
+Program.Sub.OutterShell.End
+
+Program.Sub.Comments.Start
+${$0$}$Copy BOM and Routers$}$FEQ$}$5/18/2017 10:34:48 AM$}$False
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$This project was created by FEQ on May 2017 for R+D Custom Automation.
+
+This will run from a custom menu item. The project will genetrate a screen with a BOM browser and a textbox for the user to enter in a Reference Number. The project will then copy the BOM and all associated Routers, changing the naming convention to include the reference number. 
+
+All manufactured parts in the Exploded BOM will then be renamed using the same naming convention.
+Program.Sub.Comments.End
